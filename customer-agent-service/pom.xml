@@ -11,4 +11,159 @@
     </parent>
 
     <artifactId>customer-agent-service</artifactId>
+    <name>CIBAP :: Customer Agent Service</name>
+    <description>
+        Serves all account-related read/write operations — balance lookups,
+        transaction history, and support request submission. Backed by PostgreSQL (R2DBC)
+        with Redis cache (TTL 60 s) for hot-path account summaries. Support events are
+        published to Kafka asynchronously.
+    </description>
+
+    <dependencies>
+
+        <!-- ==================== WEB / REACTIVE ==================== -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
+
+        <!-- ==================== DATABASE ==================== -->
+        <!-- R2DBC reactive PostgreSQL driver -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-r2dbc</artifactId>
+        </dependency>
+        <!--
+            io.r2dbc:r2dbc-postgresql was retired in Spring Boot 3.x.
+            The community driver moved to org.postgresql:r2dbc-postgresql,
+            which is version-managed by the Spring Boot BOM.
+        -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>r2dbc-postgresql</artifactId>
+        </dependency>
+
+        <!-- Flyway uses blocking JDBC for schema migrations at startup only -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+        </dependency>
+
+        <!-- ==================== CACHE ==================== -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis-reactive</artifactId>
+        </dependency>
+
+        <!-- ==================== MESSAGING ==================== -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
+
+        <!-- ==================== SECURITY ==================== -->
+        <!--
+            spring-boot-starter-oauth2-resource-server already pulls in
+            spring-boot-starter-security transitively. Declaring security
+            separately is redundant and has been removed.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+        </dependency>
+
+        <!-- ==================== VALIDATION ==================== -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- ==================== OBSERVABILITY ==================== -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+
+        <!-- ==================== RESILIENCE ==================== -->
+        <!--
+            Resilience4j provides circuit-breaker, retry, rate-limiter, and bulkhead
+            patterns. The reactor module integrates natively with Project Reactor's
+            Mono/Flux pipelines used throughout this service.
+        -->
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-spring-boot3</artifactId>
+            <version>${resilience4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-reactor</artifactId>
+            <version>${resilience4j.version}</version>
+        </dependency>
+
+        <!-- ==================== API DOCS ==================== -->
+        <!--
+            SpringDoc generates OpenAPI 3 documentation and serves Swagger UI.
+            The webflux variant is required for reactive (WebFlux) applications.
+        -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webflux-ui</artifactId>
+            <version>2.5.0</version>
+        </dependency>
+
+        <!-- ==================== SPRING AI MCP ==================== -->
+        <!--
+            This artifact is not covered by the spring-ai-bom's managed dependency
+            scope in all versions, so the version is pinned explicitly to match
+            the spring-ai.version property defined in the parent POM.
+        -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-mcp-server-webflux</artifactId>
+        </dependency>
+
+        <!-- ==================== TEST ==================== -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>r2dbc</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.projectreactor</groupId>
+            <artifactId>reactor-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
 </project>
+
+
