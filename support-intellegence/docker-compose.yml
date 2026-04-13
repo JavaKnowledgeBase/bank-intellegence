@@ -1,19 +1,11 @@
-version: "3.9"
-
-# CSIP — CIBAP Support Intelligence Platform
-# Extends the CIBAP docker-compose; run from /cibap root with:
-#   docker compose -f docker-compose.yml -f support-intellegence/docker-compose.yml up -d
-#
-# Or standalone (requires cibap network to exist):
-#   docker compose up -d
-
 networks:
   cibap-network:
-    external: true   # Shared network with CIBAP services
+    external: true
+    name: cibap_default   # Network created by /cibap/docker-compose.yml
 
 services:
 
-  # ── CSIP Backend ──────────────────────────────────────────────────────────
+  # ── CSIP Backend ────────────────────────────────────────────────────────────
   csip-backend:
     build:
       context: ./backend
@@ -23,9 +15,10 @@ services:
       - "8092:8092"
     environment:
       ENVIRONMENT: development
-      DATABASE_URL: postgresql+asyncpg://cibap_user:changeme@postgres:5432/cibap
-      REDIS_URL: redis://redis:6379
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      # Uses hostnames of containers on cibap_default network
+      DATABASE_URL: postgresql+asyncpg://cibap_user:changeme@cibap-postgres:5432/cibap
+      REDIS_URL: redis://cibap-redis:6379
+      KAFKA_BOOTSTRAP_SERVERS: cibap-kafka:29092
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       VECTOR_STORE_BACKEND: chromadb
@@ -39,20 +32,15 @@ services:
       - csip-chromadb:/app/data/chromadb
     networks:
       - cibap-network
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8092/api/v1/system/health"]
       interval: 20s
       timeout: 10s
       retries: 5
-      start_period: 30s
+      start_period: 40s
     restart: unless-stopped
 
-  # ── CSIP Frontend ─────────────────────────────────────────────────────────
+  # ── CSIP Frontend ───────────────────────────────────────────────────────────
   csip-frontend:
     build:
       context: ./frontend
@@ -67,7 +55,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # ── CSIP Celery Worker ────────────────────────────────────────────────────
+  # ── CSIP Celery Worker ──────────────────────────────────────────────────────
   csip-worker:
     build:
       context: ./backend
@@ -76,9 +64,9 @@ services:
     command: celery -A workers.celery_app worker --loglevel=info --queues=monitoring,analysis,fix-pipeline --concurrency=4
     environment:
       ENVIRONMENT: development
-      DATABASE_URL: postgresql+asyncpg://cibap_user:changeme@postgres:5432/cibap
-      REDIS_URL: redis://redis:6379
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      DATABASE_URL: postgresql+asyncpg://cibap_user:changeme@cibap-postgres:5432/cibap
+      REDIS_URL: redis://cibap-redis:6379
+      KAFKA_BOOTSTRAP_SERVERS: cibap-kafka:29092
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       AUTH_BYPASS: "true"
       VAULT_BYPASS: "true"
@@ -88,27 +76,29 @@ services:
     networks:
       - cibap-network
     depends_on:
-      - csip-backend
+      csip-backend:
+        condition: service_healthy
     restart: unless-stopped
 
-  # ── CSIP Celery Beat (scheduler) ─────────────────────────────────────────
+  # ── CSIP Celery Beat ────────────────────────────────────────────────────────
   csip-beat:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: csip-beat
-    command: celery -A workers.celery_app beat --loglevel=info
+    command: celery -A workers.celery_app beat --loglevel=info --schedule=/tmp/celerybeat-schedule
     environment:
       ENVIRONMENT: development
-      DATABASE_URL: postgresql+asyncpg://cibap_user:changeme@postgres:5432/cibap
-      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgresql+asyncpg://cibap_user:changeme@cibap-postgres:5432/cibap
+      REDIS_URL: redis://cibap-redis:6379
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       AUTH_BYPASS: "true"
       VAULT_BYPASS: "true"
     networks:
       - cibap-network
     depends_on:
-      - csip-worker
+      csip-worker:
+        condition: service_started
     restart: unless-stopped
 
 volumes:
