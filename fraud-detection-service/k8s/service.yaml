@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: fraud-detection-service
+  namespace: cibap-prod
+spec:
+  selector:
+    app: fraud-detection-service
+  ports:
+    - name: http
+      port: 8082
+      targetPort: 8082
+  type: ClusterIP

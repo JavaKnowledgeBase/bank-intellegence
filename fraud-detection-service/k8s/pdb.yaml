@@ -1,0 +1,10 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: fraud-detection-pdb
+  namespace: cibap-prod
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: fraud-detection-service

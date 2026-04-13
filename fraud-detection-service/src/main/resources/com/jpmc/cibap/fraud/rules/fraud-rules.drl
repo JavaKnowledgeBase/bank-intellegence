@@ -1,0 +1,58 @@
+package com.jpmc.cibap.fraud.rules;
+
+import com.jpmc.cibap.fraud.model.TransactionEvent;
+import com.jpmc.cibap.fraud.scoring.RuleEngineService.RuleScore;
+
+rule "HighValueTransaction"
+when
+    $tx : TransactionEvent(amount != null)
+    eval($tx.getAmount().doubleValue() > 5000.0)
+    $score : RuleScore()
+then
+    $score.addPoints(0.30);
+    $score.addReason("HIGH_AMOUNT");
+end
+
+rule "VelocityAlert"
+when
+    $tx : TransactionEvent()
+    eval($tx.isVelocityFlag())
+    $score : RuleScore()
+then
+    $score.addPoints(0.35);
+    $score.addReason("VELOCITY");
+end
+
+rule "InternationalNoTravelNotice"
+when
+    $tx : TransactionEvent()
+    eval($tx.isInternational() && !$tx.isTravelNotice())
+    $score : RuleScore()
+then
+    $score.addPoints(0.25);
+    $score.addReason("INTERNATIONAL_NO_NOTICE");
+end
+
+rule "OddHourTransaction"
+when
+    $tx : TransactionEvent()
+    eval($tx.getHourOfDay() >= 23 || $tx.getHourOfDay() <= 5)
+    $score : RuleScore()
+then
+    $score.addPoints(0.10);
+    $score.addReason("ODD_HOUR");
+end
+
+rule "HighRiskMCC"
+when
+    $tx : TransactionEvent(merchantCategoryCode != null)
+    eval(
+        $tx.getMerchantCategoryCode().equals("6051")
+            || $tx.getMerchantCategoryCode().equals("7995")
+            || $tx.getMerchantCategoryCode().equals("9406")
+    )
+    $score : RuleScore()
+then
+    $score.addPoints(0.20);
+    $score.addReason("HIGH_RISK_MCC");
+end

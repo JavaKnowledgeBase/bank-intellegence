@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fraud-detection-service
+  namespace: cibap-prod
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: fraud-detection-service
+  template:
+    metadata:
+      labels:
+        app: fraud-detection-service
+    spec:
+      containers:
+        - name: fraud-detection-service
+          image: <773182953823>.dkr.ecr.us-east-1.amazonaws.com/fraud-detection-service:latest
+          ports:
+            - containerPort: 8082
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "1Gi"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8082
+            initialDelaySeconds: 20
+            periodSeconds: 5
