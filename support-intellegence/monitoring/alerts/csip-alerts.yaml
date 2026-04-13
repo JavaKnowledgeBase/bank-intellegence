@@ -1,0 +1,53 @@
+groups:
+  - name: csip-critical
+    rules:
+    - alert: CSIPConsumerLagCritical
+      expr: kafka_consumer_lag{consumer_group="csip-monitoring"} > 10000
+      for: 5m
+      labels:
+        severity: critical
+        team: platform-ai
+      annotations:
+        summary: "CSIP Kafka consumer lag critical — detection SLA at risk"
+        description: "Consumer lag {{ $value }} exceeds 10,000 messages. Detection SLA of 90s is at risk."
+
+    - alert: CSIPLLMBudgetExceeded90
+      expr: (csip_llm_cost_usd_total / csip_llm_daily_budget) > 0.9
+      for: 1m
+      labels:
+        severity: warning
+        team: platform-ai
+      annotations:
+        summary: "CSIP LLM budget at 90% — review agent efficiency"
+
+    - alert: CSIPFixPipelineStalled
+      expr: csip_fix_pipeline_in_progress > 0 and (time() - csip_fix_pipeline_started_at) > 1800
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Fix pipeline running >30 min — possible K8s sandbox job failure"
+
+    - alert: CSIPAPIDown
+      expr: up{job="csip-api"} == 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "CSIP API is unreachable"
+
+    - alert: CSIPHighFalsePositiveRate
+      expr: rate(csip_issues_total{status="false_positive"}[1h]) > 0.3
+      for: 10m
+      labels:
+        severity: warning
+      annotations:
+        summary: "CSIP false positive rate >30% — noise reduction needs tuning"
+
+    - alert: CSIPRCAAccuracyLow
+      expr: csip_rca_accuracy < 0.75
+      for: 30m
+      labels:
+        severity: warning
+      annotations:
+        summary: "CSIP RCA accuracy below 75% — self-improver should be reviewed"

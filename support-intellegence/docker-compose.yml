@@ -1,0 +1,116 @@
+version: "3.9"
+
+# CSIP — CIBAP Support Intelligence Platform
+# Extends the CIBAP docker-compose; run from /cibap root with:
+#   docker compose -f docker-compose.yml -f support-intellegence/docker-compose.yml up -d
+#
+# Or standalone (requires cibap network to exist):
+#   docker compose up -d
+
+networks:
+  cibap-network:
+    external: true   # Shared network with CIBAP services
+
+services:
+
+  # ── CSIP Backend ──────────────────────────────────────────────────────────
+  csip-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: csip-backend
+    ports:
+      - "8092:8092"
+    environment:
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+asyncpg://cibap_user:changeme@postgres:5432/cibap
+      REDIS_URL: redis://redis:6379
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      VECTOR_STORE_BACKEND: chromadb
+      CHROMADB_PATH: /app/data/chromadb
+      AUTH_BYPASS: "true"
+      VAULT_BYPASS: "true"
+      OTEL_ENABLED: "false"
+      LOG_LEVEL: INFO
+    volumes:
+      - csip-audit-logs:/app/audit_logs
+      - csip-chromadb:/app/data/chromadb
+    networks:
+      - cibap-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8092/api/v1/system/health"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # ── CSIP Frontend ─────────────────────────────────────────────────────────
+  csip-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: csip-frontend
+    ports:
+      - "3100:80"
+    networks:
+      - cibap-network
+    depends_on:
+      csip-backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── CSIP Celery Worker ────────────────────────────────────────────────────
+  csip-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: csip-worker
+    command: celery -A workers.celery_app worker --loglevel=info --queues=monitoring,analysis,fix-pipeline --concurrency=4
+    environment:
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+asyncpg://cibap_user:changeme@postgres:5432/cibap
+      REDIS_URL: redis://redis:6379
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AUTH_BYPASS: "true"
+      VAULT_BYPASS: "true"
+    volumes:
+      - csip-audit-logs:/app/audit_logs
+      - csip-chromadb:/app/data/chromadb
+    networks:
+      - cibap-network
+    depends_on:
+      - csip-backend
+    restart: unless-stopped
+
+  # ── CSIP Celery Beat (scheduler) ─────────────────────────────────────────
+  csip-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: csip-beat
+    command: celery -A workers.celery_app beat --loglevel=info
+    environment:
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+asyncpg://cibap_user:changeme@postgres:5432/cibap
+      REDIS_URL: redis://redis:6379
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AUTH_BYPASS: "true"
+      VAULT_BYPASS: "true"
+    networks:
+      - cibap-network
+    depends_on:
+      - csip-worker
+    restart: unless-stopped
+
+volumes:
+  csip-audit-logs:
+  csip-chromadb:
