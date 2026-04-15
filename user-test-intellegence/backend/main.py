@@ -13,6 +13,7 @@ from api.v1.evidence import router as evidence_router
 from api.v1.gate import router as gate_router
 from api.v1.runs import router as runs_router
 from api.v1.scout import router as scout_router
+from api.v1.knowledge import router as knowledge_router
 from api.v1.search import router as search_router
 from api.v1.self_improvement import router as self_improvement_router
 from api.v1.test_cases import router as test_cases_router
@@ -57,6 +58,7 @@ def create_app() -> FastAPI:
     app.include_router(compliance_router)
     app.include_router(analysis_router)
     app.include_router(evidence_router)
+    app.include_router(knowledge_router)
     app.include_router(search_router)
     app.include_router(websocket_router)
     return app
