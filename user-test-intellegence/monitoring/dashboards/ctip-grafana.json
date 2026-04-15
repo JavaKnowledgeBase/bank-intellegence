@@ -1,0 +1,8 @@
+{
+  "title": "CTIP Local Dashboard",
+  "panels": [
+    {"title": "Suite Pass Rate", "type": "stat"},
+    {"title": "Coverage Gaps", "type": "table"},
+    {"title": "Scout Safety Status", "type": "piechart"}
+  ]
+}

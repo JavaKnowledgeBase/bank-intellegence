@@ -1,0 +1,15 @@
+{
+  "mappings": [
+    {
+      "request": {
+        "method": "POST",
+        "urlPath": "/endpoints/cibap-fraud-model-v2/invocations"
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "body": "{\"fraud_score\": 0.12}"
+      }
+    }
+  ]
+}

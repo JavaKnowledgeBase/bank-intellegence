@@ -1,0 +1,10 @@
+{
+  "name": "ctip-playwright-runner",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "echo local runner uses native node execution",
+    "run": "node run-shard.mjs"
+  }
+}

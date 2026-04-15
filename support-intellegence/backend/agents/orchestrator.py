@@ -75,6 +75,7 @@ class Orchestrator:
             leader_lock=leader_lock,
             ws_broadcaster=self._ws_broadcast,
             issue_callback=self._on_issue_detected,
+            session_factory=session_factory,
         )
         self._improver = SelfImproverAgent(
             llm=claude,

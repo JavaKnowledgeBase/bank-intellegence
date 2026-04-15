@@ -1,0 +1,108 @@
+﻿server:
+  port: 8000
+
+spring:
+  application:
+    name: api-gateway
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://keycloak:8080/realms/cibap}
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+  cloud:
+    gateway:
+      server:
+        webflux:
+          default-filters:
+            - AddResponseHeader=X-Response-Service, api-gateway
+          routes:
+            - id: agent-route
+              uri: ${ORCHESTRATION_SERVICE_URL:http://orchestration-service:8080}
+              predicates:
+                - Path=/api/v1/agent/**
+              filters:
+                - CircuitBreaker=name=orchestration,fallbackUri=/fallback/agent
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 5
+                    redis-rate-limiter.burstCapacity: 10
+                    redis-rate-limiter.requestedTokens: 1
+                    key-resolver: "#{@jwtSubjectKeyResolver}"
+
+            - id: accounts-route
+              uri: ${CUSTOMER_AGENT_URL:http://customer-agent-service:8081}
+              predicates:
+                - Path=/api/v1/accounts/**
+              filters:
+                - CircuitBreaker=name=customer-agent,fallbackUri=/fallback/accounts
+
+            - id: fraud-route
+              uri: ${FRAUD_DETECTION_URL:http://fraud-detection-service:8082}
+              predicates:
+                - Path=/api/v1/fraud/**
+              filters:
+                - CircuitBreaker=name=fraud-detection,fallbackUri=/fallback/fraud
+
+            - id: loans-route
+              uri: ${LOAN_PRESCREEN_URL:http://loan-prescreen-service:8083}
+              predicates:
+                - Path=/api/v1/loans/**
+              filters:
+                - CircuitBreaker=name=loan-prescreen,fallbackUri=/fallback/loans
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      orchestration:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+      customer-agent:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+      fraud-detection:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        failureRateThreshold: 30
+        waitDurationInOpenState: 5s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+      loan-prescreen:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics,gateway
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always
+      show-components: always
+  metrics:
+    tags:
+      service: api-gateway
+
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO
+    com.jpmc.cibap.gateway: INFO
+

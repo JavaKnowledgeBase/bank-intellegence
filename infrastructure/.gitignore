@@ -1,0 +1,18 @@
+﻿# Local generated data and secrets
+*.log
+*.tmp
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# OS / IDE files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.iml

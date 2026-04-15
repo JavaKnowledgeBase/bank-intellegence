@@ -50,11 +50,13 @@ class MonitorAgent:
         leader_lock: MonitorLeaderLock,
         ws_broadcaster,       # WebSocket broadcast callable
         issue_callback,       # Async callback(app, cluster) when error cluster detected
+        session_factory=None, # Optional DB session factory for status persistence
     ):
         self._cache = cache
         self._lock = leader_lock
         self._broadcast = ws_broadcaster
         self._on_issue = issue_callback
+        self._session_factory = session_factory
         self._http = httpx.AsyncClient(timeout=10.0, follow_redirects=True)
         self._monitors: dict[str, asyncio.Task] = {}
 
@@ -108,6 +110,20 @@ class MonitorAgent:
                         app.name, current_status, new_status,
                     )
                     current_status = new_status
+
+                    # Persist status change to PostgreSQL
+                    if self._session_factory:
+                        try:
+                            from sqlalchemy import update
+                            async with self._session_factory() as session:
+                                await session.execute(
+                                    update(AppConfigORM)
+                                    .where(AppConfigORM.id == app.id)
+                                    .values(status=new_status.value)
+                                )
+                                await session.commit()
+                        except Exception as db_exc:
+                            logger.warning("Failed to persist status for %s: %s", app.id, db_exc)
 
                 # Cache latest snapshot
                 await self._cache.set(

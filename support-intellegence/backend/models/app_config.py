@@ -80,6 +80,8 @@ class AppConfigCreate(BaseModel):
 
 
 class AppConfigUpdate(BaseModel):
+    base_url: Optional[str] = None
+    name: Optional[str] = None
     tier: Optional[AppTier] = None
     repo_url: Optional[str] = None
     codeowners: Optional[list[str]] = None

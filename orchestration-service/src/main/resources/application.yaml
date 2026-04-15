@@ -1,0 +1,74 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: orchestration-service
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://localhost:27017/cibap}
+      database: cibap
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${JWT_ISSUER_URI:https://auth.chase.internal/realms/cibap}
+
+aws:
+  region: ${AWS_REGION:us-east-1}
+  bedrock:
+    model-id: ${BEDROCK_MODEL_ID:anthropic.claude-3-5-sonnet-20241022-v2:0}
+
+services:
+  customer-agent:
+    url: ${CUSTOMER_AGENT_URL:http://customer-agent-service:8081}
+  fraud-detection:
+    url: ${FRAUD_DETECTION_URL:http://fraud-detection-service:8082}
+  loan-prescreen:
+    url: ${LOAN_PRESCREEN_URL:http://loan-prescreen-service:8083}
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      customer-agent:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+      fraud-detection:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        failureRateThreshold: 30
+        waitDurationInOpenState: 5s
+      loan-prescreen:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  metrics:
+    tags:
+      service: orchestration-service
+
+logging:
+  pattern:
+    console: >
+      {"timestamp":"%d{ISO8601}","level":"%p","service":"orchestration",
+       "traceId":"%X{traceId}","spanId":"%X{spanId}","message":"%m"}%n

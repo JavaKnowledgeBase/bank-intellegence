@@ -1,0 +1,56 @@
+spring:
+  application:
+    name: cibap-mcp-server
+
+server:
+  port: 8095
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+# MCP Gateway configuration
+mcp:
+  dev-bypass-auth: true
+  csip-base-url: http://localhost:8092
+  ctip-base-url: http://localhost:8091
+  cibap-base-url: http://localhost:8081
+  cibap-service-urls:
+    customer-agent: http://localhost:8081
+    fraud-detection: http://localhost:8082
+    loan-prescreen: http://localhost:8083
+    notification: http://localhost:8084
+    orchestration: http://localhost:8085
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      csip:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+      ctip:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+      cibap:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+
+logging:
+  level:
+    com.jpmc.cibap: DEBUG
+    org.springframework.web.reactive: INFO
+    root: INFO

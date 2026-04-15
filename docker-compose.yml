@@ -1,0 +1,197 @@
+services:
+  # -- PostgreSQL ------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: cibap-postgres
+    environment:
+      POSTGRES_DB: cibap
+      POSTGRES_USER: cibap_user
+      POSTGRES_PASSWORD: changeme
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infrastructure/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cibap_user -d cibap"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # -- Redis ----------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: cibap-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 5
+
+  # -- MongoDB ---------------------------------------------------------------
+  mongodb:
+    image: mongo:7
+    container_name: cibap-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: cibap
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.runCommand('ping').ok"]
+      interval: 10s
+      retries: 5
+
+  # -- Kafka (with KRaft - no Zookeeper needed) -----------------------------
+  kafka:
+    image: confluentinc/cp-kafka:7.7.0
+    container_name: cibap-kafka
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+      - "9101:9101"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qg"
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      retries: 10
+
+  # -- Kafka UI (browser at http://localhost:8090) --------------------------
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: cibap-kafka-ui
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  # -- Keycloak (local OAuth2 / JWT issuer) ---------------------------------
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0.2
+    container_name: cibap-keycloak
+    command: start-dev --import-realm
+    ports:
+      - "8180:8080"
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: "true"
+    volumes:
+      - ./infrastructure/keycloak/cibap-realm.json:/opt/keycloak/data/import/cibap-realm.json
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/9000'"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
+  # -- WireMock (mocks credit bureau + SageMaker in local/test) -------------
+  wiremock:
+    image: wiremock/wiremock:3.6.0
+    container_name: cibap-wiremock
+    ports:
+      - "8888:8080"
+    volumes:
+      - ./infrastructure/wiremock:/home/wiremock
+
+  # -- Implemented Spring Boot apps -----------------------------------------
+  customer-agent-service:
+    build:
+      context: .
+      dockerfile: customer-agent-service/Dockerfile
+    container_name: cibap-customer-agent-service
+    ports:
+      - "8081:8081"
+    environment:
+      R2DBC_URL: r2dbc:postgresql://postgres:5432/cibap
+      JDBC_URL: jdbc:postgresql://postgres:5432/cibap
+      DB_USERNAME: cibap_user
+      DB_PASSWORD: changeme
+      REDIS_HOST: redis
+      KAFKA_BROKERS: kafka:29092
+      JWT_ISSUER_URI: http://keycloak:8080/realms/cibap
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+
+  fraud-detection-service:
+    build:
+      context: .
+      dockerfile: fraud-detection-service/Dockerfile
+    container_name: cibap-fraud-detection-service
+    ports:
+      - "8082:8082"
+    environment:
+      REDIS_HOST: redis
+      KAFKA_BROKERS: kafka:29092
+      AWS_REGION: us-east-1
+    depends_on:
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  loan-prescreen-service:
+    build:
+      context: .
+      dockerfile: loan-prescreen-service/Dockerfile
+    container_name: cibap-loan-prescreen-service
+    ports:
+      - "8083:8083"
+    environment:
+      R2DBC_URL: r2dbc:postgresql://postgres:5432/cibap
+      JDBC_URL: jdbc:postgresql://postgres:5432/cibap
+      DB_USERNAME: cibap_user
+      DB_PASSWORD: changeme
+      KAFKA_BROKERS: kafka:29092
+      JWT_ISSUER_URI: http://keycloak:8080/realms/cibap
+      CREDIT_BUREAU_URL: http://wiremock:8080
+      CREDIT_BUREAU_MOCK: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+      wiremock:
+        condition: service_started
+
+  # -- Redis Insight (browser at http://localhost:5540) ---------------------
+  redis-insight:
+    image: redis/redisinsight:latest
+    container_name: cibap-redis-ui
+    ports:
+      - "5540:5540"
+
+  # api-gateway, orchestration-service, and notification-service are not
+  # included yet because they still only have skeleton POMs and no runnable
+  # Spring Boot source tree in this repo.
+
+volumes:
+  postgres-data:
+  mongo-data:

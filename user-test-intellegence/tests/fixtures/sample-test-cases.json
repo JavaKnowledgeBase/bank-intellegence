@@ -1,0 +1,16 @@
+[
+  {
+    "id": "tc-sample-100",
+    "title": "TEST_customer_profile_create",
+    "target_service": "customer-agent-service",
+    "endpoint": "/customers",
+    "priority": "critical"
+  },
+  {
+    "id": "tc-sample-101",
+    "title": "TEST_fraud_score_assessment",
+    "target_service": "fraud-detection-service",
+    "endpoint": "/fraud/check",
+    "priority": "high"
+  }
+]

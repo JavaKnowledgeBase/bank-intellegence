@@ -1,0 +1,10 @@
+groups:
+  - name: ctip
+    rules:
+      - alert: CTIPSuiteFailuresHigh
+        expr: ctip_suite_failed_total > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: CTIP suite failures are elevated.

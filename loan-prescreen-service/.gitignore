@@ -1,0 +1,36 @@
+﻿# Maven / Java build output
+target/
+out/
+build/
+*.class
+*.log
+
+# Maven local files
+.mvn/timing.properties
+dependency-reduced-pom.xml
+
+# IDE settings
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.classpath
+.project
+.settings/
+.apt_generated/
+.factorypath
+.springBeans
+.sts4-cache/
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Tool metadata
+.claude/

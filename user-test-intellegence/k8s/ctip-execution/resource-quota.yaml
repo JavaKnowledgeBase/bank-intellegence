@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: execution-quota
+  namespace: ctip-execution
+spec:
+  hard:
+    pods: "200"
+    requests.cpu: "100"
+    requests.memory: "200Gi"
+    count/jobs.batch: "100"

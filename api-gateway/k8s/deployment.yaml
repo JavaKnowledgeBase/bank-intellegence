@@ -1,0 +1,83 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: cibap-prod
+  labels:
+    app: api-gateway
+    version: "1.0"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8000"
+    spec:
+      serviceAccountName: api-gateway-sa
+      containers:
+        - name: api-gateway
+          image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/api-gateway:latest # replace 123456789012 with your AWS account ID
+          ports:
+            - containerPort: 8000
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "prod"
+            - name: KEYCLOAK_ISSUER_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: cibap-config
+                  key: keycloak-issuer-uri
+            - name: REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: cibap-config
+                  key: redis-host
+            - name: ORCHESTRATION_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: cibap-config
+                  key: orchestration-service-url
+            - name: CUSTOMER_AGENT_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: cibap-config
+                  key: customer-agent-url
+            - name: FRAUD_DETECTION_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: cibap-config
+                  key: fraud-detection-url
+            - name: LOAN_PRESCREEN_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: cibap-config
+                  key: loan-prescreen-url
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "384Mi"
+            limits:
+              cpu: "1000m"
+              memory: "768Mi"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8000
+            initialDelaySeconds: 45
+            periodSeconds: 15
+            failureThreshold: 3
+
