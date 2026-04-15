@@ -4,6 +4,7 @@ package com.jpmc.cibap.orchestration.tools;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 
@@ -11,6 +12,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 @RequiredArgsConstructor
 public class LoanEligibilityTool {
 
+    @Qualifier("loanPrescreenClient")
     private final WebClient loanPrescreenClient;
 
     @Tool("Initiates a loan pre-screening check for a customer. " +

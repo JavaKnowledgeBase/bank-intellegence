@@ -1,5 +1,4 @@
-services:
-  # -- PostgreSQL ------------------------------------------------------------
+﻿services:
   postgres:
     image: postgres:16-alpine
     container_name: cibap-postgres
@@ -8,29 +7,28 @@ services:
       POSTGRES_USER: cibap_user
       POSTGRES_PASSWORD: changeme
     ports:
-      - "5432:5432"
+      - "15432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./infrastructure/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./infrastructure/sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U cibap_user -d cibap"]
       interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 20
 
-  # -- Redis ----------------------------------------------------------------
   redis:
     image: redis:7-alpine
     container_name: cibap-redis
     ports:
-      - "6379:6379"
+      - "16379:6379"
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
-      retries: 5
+      timeout: 3s
+      retries: 20
 
-  # -- MongoDB ---------------------------------------------------------------
   mongodb:
     image: mongo:7
     container_name: cibap-mongodb
@@ -43,39 +41,42 @@ services:
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.runCommand('ping').ok"]
       interval: 10s
-      retries: 5
+      timeout: 5s
+      retries: 10
 
-  # -- Kafka (with KRaft - no Zookeeper needed) -----------------------------
   kafka:
     image: confluentinc/cp-kafka:7.7.0
     container_name: cibap-kafka
     ports:
-      - "9092:9092"
+      - "19092:9092"
       - "29092:29092"
-      - "9101:9101"
+      - "19101:9101"
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:19092
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qg"
     healthcheck:
       test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
       interval: 10s
-      retries: 10
+      timeout: 10s
+      retries: 20
 
-  # -- Kafka UI (browser at http://localhost:8090) --------------------------
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: cibap-kafka-ui
     ports:
-      - "8090:8080"
+      - "18090:8080"
     environment:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
@@ -83,7 +84,6 @@ services:
       kafka:
         condition: service_healthy
 
-  # -- Keycloak (local OAuth2 / JWT issuer) ---------------------------------
   keycloak:
     image: quay.io/keycloak/keycloak:25.0.2
     container_name: cibap-keycloak
@@ -95,24 +95,31 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: admin
       KC_HEALTH_ENABLED: "true"
     volumes:
-      - ./infrastructure/keycloak/cibap-realm.json:/opt/keycloak/data/import/cibap-realm.json
+      - ./infrastructure/keycloak/cibap-realm.json:/opt/keycloak/data/import/cibap-realm.json:ro
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/9000'"]
       interval: 10s
       timeout: 5s
-      retries: 15
+      retries: 20
       start_period: 30s
 
-  # -- WireMock (mocks credit bureau + SageMaker in local/test) -------------
   wiremock:
     image: wiremock/wiremock:3.6.0
     container_name: cibap-wiremock
     ports:
       - "8888:8080"
     volumes:
-      - ./infrastructure/wiremock:/home/wiremock
+      - ./infrastructure/wiremock:/home/wiremock:ro
 
-  # -- Implemented Spring Boot apps -----------------------------------------
+  redis-insight:
+    image: redis/redisinsight:latest
+    container_name: cibap-redis-ui
+    ports:
+      - "5540:5540"
+    depends_on:
+      redis:
+        condition: service_healthy
+
   customer-agent-service:
     build:
       context: .
@@ -128,6 +135,7 @@ services:
       REDIS_HOST: redis
       KAFKA_BROKERS: kafka:29092
       JWT_ISSUER_URI: http://keycloak:8080/realms/cibap
+      ENVIRONMENT: docker
     depends_on:
       postgres:
         condition: service_healthy
@@ -149,6 +157,7 @@ services:
       REDIS_HOST: redis
       KAFKA_BROKERS: kafka:29092
       AWS_REGION: us-east-1
+      SAGEMAKER_ENDPOINT: local-mock
     depends_on:
       redis:
         condition: service_healthy
@@ -181,17 +190,300 @@ services:
       wiremock:
         condition: service_started
 
-  # -- Redis Insight (browser at http://localhost:5540) ---------------------
-  redis-insight:
-    image: redis/redisinsight:latest
-    container_name: cibap-redis-ui
+  notification-service:
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
+    container_name: cibap-notification-service
     ports:
-      - "5540:5540"
+      - "8084:8084"
+    environment:
+      R2DBC_URL: r2dbc:postgresql://postgres:5432/cibap
+      JDBC_URL: jdbc:postgresql://postgres:5432/cibap
+      DB_USERNAME: cibap_user
+      DB_PASSWORD: changeme
+      REDIS_HOST: redis
+      KAFKA_BROKERS: kafka:29092
+      AWS_REGION: us-east-1
+      NOTIFICATION_MOCK: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
 
-  # api-gateway, orchestration-service, and notification-service are not
-  # included yet because they still only have skeleton POMs and no runnable
-  # Spring Boot source tree in this repo.
+  orchestration-service:
+    build:
+      context: .
+      dockerfile: orchestration-service/Dockerfile
+    container_name: cibap-orchestration-service
+    ports:
+      - "8080:8084"
+    environment:
+      MONGODB_URI: mongodb://mongodb:27017/cibap
+      REDIS_HOST: redis
+      JWT_ISSUER_URI: http://keycloak:8080/realms/cibap
+      AWS_REGION: us-east-1
+      CUSTOMER_AGENT_URL: http://customer-agent-service:8081
+      FRAUD_DETECTION_URL: http://fraud-detection-service:8082
+      LOAN_PRESCREEN_URL: http://loan-prescreen-service:8083
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+      customer-agent-service:
+        condition: service_started
+      fraud-detection-service:
+        condition: service_started
+      loan-prescreen-service:
+        condition: service_started
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    container_name: cibap-api-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      KEYCLOAK_ISSUER_URI: http://keycloak:8080/realms/cibap
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      ORCHESTRATION_SERVICE_URL: http://orchestration-service:8084
+      CUSTOMER_AGENT_URL: http://customer-agent-service:8081
+      FRAUD_DETECTION_URL: http://fraud-detection-service:8082
+      LOAN_PRESCREEN_URL: http://loan-prescreen-service:8083
+    depends_on:
+      redis:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+      orchestration-service:
+        condition: service_started
+      customer-agent-service:
+        condition: service_started
+      fraud-detection-service:
+        condition: service_started
+      loan-prescreen-service:
+        condition: service_started
+
+  cibap-mcp-server:
+    build:
+      context: .
+      dockerfile: cibap-mcp-server/Dockerfile
+    container_name: cibap-mcp-server
+    ports:
+      - "8095:8095"
+    environment:
+      MCP_CSIP_BASE_URL: http://csip-backend:8092
+      MCP_CTIP_BASE_URL: http://ctip-backend:8091
+      MCP_CIBAP_BASE_URL: http://api-gateway:8000
+      MCP_CIBAP_SERVICE_URLS_CUSTOMER_AGENT: http://customer-agent-service:8081
+      MCP_CIBAP_SERVICE_URLS_FRAUD_DETECTION: http://fraud-detection-service:8082
+      MCP_CIBAP_SERVICE_URLS_LOAN_PRESCREEN: http://loan-prescreen-service:8083
+      MCP_CIBAP_SERVICE_URLS_NOTIFICATION: http://notification-service:8084
+      MCP_CIBAP_SERVICE_URLS_ORCHESTRATION: http://orchestration-service:8084
+    depends_on:
+      api-gateway:
+        condition: service_started
+      csip-backend:
+        condition: service_started
+      ctip-backend:
+        condition: service_started
+
+  csip-backend:
+    build:
+      context: ./support-intellegence/backend
+      dockerfile: Dockerfile
+    container_name: cibap-csip-backend
+    ports:
+      - "33092:8092"
+    environment:
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+asyncpg://cibap_user:changeme@postgres:5432/cibap
+      REDIS_URL: redis://redis:6379
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      VECTOR_STORE_BACKEND: chromadb
+      CHROMADB_PATH: /app/data/chromadb
+      AUTH_BYPASS: "true"
+      VAULT_BYPASS: "true"
+      OTEL_ENABLED: "false"
+      LOG_LEVEL: INFO
+    volumes:
+      - csip-audit-logs:/app/audit_logs
+      - csip-chromadb:/app/data/chromadb
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  csip-frontend:
+    build:
+      context: ./support-intellegence/frontend
+      dockerfile: Dockerfile
+    container_name: cibap-csip-frontend
+    ports:
+      - "33100:80"
+    depends_on:
+      csip-backend:
+        condition: service_started
+
+  csip-worker:
+    build:
+      context: ./support-intellegence/backend
+      dockerfile: Dockerfile
+    container_name: cibap-csip-worker
+    command: celery -A workers.celery_app worker --loglevel=info --queues=monitoring,analysis,fix-pipeline --concurrency=2
+    environment:
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+asyncpg://cibap_user:changeme@postgres:5432/cibap
+      REDIS_URL: redis://redis:6379
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AUTH_BYPASS: "true"
+      VAULT_BYPASS: "true"
+    volumes:
+      - csip-audit-logs:/app/audit_logs
+      - csip-chromadb:/app/data/chromadb
+    depends_on:
+      csip-backend:
+        condition: service_started
+
+  csip-beat:
+    build:
+      context: ./support-intellegence/backend
+      dockerfile: Dockerfile
+    container_name: cibap-csip-beat
+    command: celery -A workers.celery_app beat --loglevel=info --schedule=/tmp/celerybeat-schedule
+    environment:
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+asyncpg://cibap_user:changeme@postgres:5432/cibap
+      REDIS_URL: redis://redis:6379
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AUTH_BYPASS: "true"
+      VAULT_BYPASS: "true"
+    depends_on:
+      csip-worker:
+        condition: service_started
+
+  ctip-postgres:
+    image: postgres:16-alpine
+    container_name: cibap-ctip-postgres
+    environment:
+      POSTGRES_DB: ctip
+      POSTGRES_USER: ctip
+      POSTGRES_PASSWORD: ctip
+    ports:
+      - "15433:5432"
+    volumes:
+      - ctip-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ctip -d ctip"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  ctip-redis:
+    image: redis:7-alpine
+    container_name: cibap-ctip-redis
+    ports:
+      - "16380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  ctip-elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    container_name: cibap-ctip-elasticsearch
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "19200:9200"
+    volumes:
+      - ctip-elastic-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=1s >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  ctip-backend:
+    build:
+      context: ./user-test-intellegence
+      dockerfile: backend/Dockerfile
+    container_name: cibap-ctip-backend
+    ports:
+      - "18091:8091"
+    environment:
+      ENVIRONMENT: development
+      FRONTEND_ORIGIN: http://localhost:33200
+      DATABASE_URL: postgresql+psycopg://ctip:ctip@ctip-postgres:5432/ctip
+      TASK_QUEUE_MODE: celery
+      CELERY_BROKER_URL: redis://ctip-redis:6379/0
+      CELERY_RESULT_BACKEND: redis://ctip-redis:6379/0
+      SEARCH_BACKEND_MODE: auto
+      ELASTICSEARCH_URL: http://ctip-elasticsearch:9200
+      SERVICE_URLS_JSON: '{"customer-agent-service":"http://customer-agent-service:8081","fraud-detection-service":"http://fraud-detection-service:8082","loan-prescreen-service":"http://loan-prescreen-service:8083"}'
+    depends_on:
+      ctip-postgres:
+        condition: service_healthy
+      ctip-redis:
+        condition: service_healthy
+      ctip-elasticsearch:
+        condition: service_healthy
+
+  ctip-worker:
+    build:
+      context: ./user-test-intellegence
+      dockerfile: backend/Dockerfile
+    container_name: cibap-ctip-worker
+    command: celery -A workers.celery_app.celery_app worker --loglevel=info
+    environment:
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+psycopg://ctip:ctip@ctip-postgres:5432/ctip
+      TASK_QUEUE_MODE: celery
+      CELERY_BROKER_URL: redis://ctip-redis:6379/0
+      CELERY_RESULT_BACKEND: redis://ctip-redis:6379/0
+      SEARCH_BACKEND_MODE: auto
+      ELASTICSEARCH_URL: http://ctip-elasticsearch:9200
+    depends_on:
+      ctip-backend:
+        condition: service_started
+
+  ctip-frontend:
+    image: node:24-alpine
+    container_name: cibap-ctip-frontend
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 3200"
+    ports:
+      - "33200:3200"
+    volumes:
+      - ./user-test-intellegence/frontend:/app
+    environment:
+      VITE_API_BASE: http://localhost:18091
+    depends_on:
+      ctip-backend:
+        condition: service_started
 
 volumes:
   postgres-data:
   mongo-data:
+  csip-audit-logs:
+  csip-chromadb:
+  ctip-postgres-data:
+  ctip-elastic-data:

@@ -1,0 +1,66 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: notification-service
+  r2dbc:
+    url: ${R2DBC_URL:r2dbc:postgresql://localhost:5432/cibap}
+    username: ${DB_USERNAME:cibap_user}
+    password: ${DB_PASSWORD:changeme}
+  flyway:
+    url: ${JDBC_URL:jdbc:postgresql://localhost:5432/cibap}
+    user: ${DB_USERNAME:cibap_user}
+    password: ${DB_PASSWORD:changeme}
+    validate-on-migrate: false
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  kafka:
+    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
+    consumer:
+      group-id: notification-group
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    listener:
+      ack-mode: MANUAL_IMMEDIATE
+  thymeleaf:
+    prefix: classpath:/templates/
+    suffix: .html
+    mode: HTML
+    encoding: UTF-8
+
+aws:
+  region: ${AWS_REGION:us-east-1}
+  ses:
+    from-address: ${SES_FROM_ADDRESS:alerts@chase.com}
+  notifications:
+    mock: ${NOTIFICATION_MOCK:true}
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      sns:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
+      ses:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      service: notification-service

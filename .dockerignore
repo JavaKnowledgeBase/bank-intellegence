@@ -1,0 +1,10 @@
+﻿# Ignore local/generated files from Docker build context
+.git/
+**/target/
+**/node_modules/
+**/dist/
+**/.pytest_cache/
+**/__pycache__/
+api-gateway - Copy22/
+api-gateway - Copy.zip
+*.zip

@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head><meta charset="UTF-8"/><title>Security Alert</title></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+  <h2 style="color: #d32f2f;">Security Alert</h2>
+  <p>We detected suspicious activity on your account.</p>
+  <p>Amount: <strong th:text="${amount}">$0.00</strong></p>
+  <p>Merchant: <strong th:text="${merchant}">Unknown</strong></p>
+  <p>Status: <strong th:text="${disposition}">FLAG</strong></p>
+</body>
+</html>

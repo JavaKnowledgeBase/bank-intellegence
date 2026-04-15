@@ -4,6 +4,7 @@ package com.jpmc.cibap.orchestration.tools;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
@@ -12,6 +13,7 @@ import reactor.core.publisher.Mono;
 @RequiredArgsConstructor
 public class AccountLookupTool {
 
+    @Qualifier("customerAgentClient")
     private final WebClient customerAgentClient;
 
     @Tool("Retrieves a customer's account summary including balances and status. " +
